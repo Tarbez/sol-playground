@@ -54,65 +54,60 @@ contract CUDDAOCommunications is AccessControl {
         require(isTokenHolder(msg.sender));
     }
 
-    function addProposal(
-        address _tokenAddress,
-        string memory _title,
-        string memory _description,
-        string[] memory _useCases,
-        uint256 _potentialImpact,
-        uint256 _potentialRewards,
-        address[] memory _accessControl
-    ) public {
-        require(_tokenAddress != address(0));
-        requireValidNFT();
-        requireTokenHolder();
-        require(accessControl.isRoleMember("proposer", msg.sender));
-        mapping(address => bool) voted = new mapping(address => bool);
-        Proposal memory newProposal = Proposal({
-            proposer: msg.sender,
-            title: _title,
-            description: _description,
-            useCases: _useCases,
-            executed: false,
-            potentialImpact: _potentialImpact,
-            potentialRewards: _potentialRewards,
-            accessControl: _accessControl,
-            proposalId: proposalCount + 1,
-            voted: voted,
-            voteCount: 0
-        });
-        proposals[proposalCount + 1] = newProposal;
-        proposalCount++;
+  function addProposal(
+    address _tokenAddress,
+    string memory _title,
+    string memory _description,
+    string[] memory _useCases,
+    uint256 _potentialImpact,
+    uint256 _potentialRewards,
+    address[] memory _accessControl
+) public {
+    require(_tokenAddress != address(0));
+    requireValidNFT();
+    requireTokenHolder();
+    require(accessControl.isRoleMember("proposer", msg.sender));
+    Proposal memory newProposal = Proposal({
+        proposer: msg.sender,
+        title: _title,
+        description: _description,
+        useCases: _useCases,
+        executed: false,
+        potentialImpact: _potentialImpact,
+        potentialRewards: _potentialRewards,
+        accessControl: _accessControl,
+        proposalId: proposalCount + 1,
+        voted: new mapping(address => bool),
+        voteCount: 0,
+        comments: new string[](0),
+        commenters: new address[](0)
+    });
+    proposals[proposalCount + 1] = newProposal;
+    proposalCount++;
+}
+
+function executeProposal(uint256 _proposalId) public onlyRole(msg.sender, "proposer") {
+    require(_proposalId > 0 && _proposalId <= proposalCount);
+    Proposal storage proposal = proposals[_proposalId];
+
+    // Check if proposal has been voted on
+    require(proposal.voteCount > 0);
+
+    // Check if proposal has been executed
+    require(!proposal.executed);
+
+    // Execute proposal
+    proposal.executed = true;
+
+    // Add voter role to all voters
+    for (address voter in proposal.voted) {
+        accessControl.createRole("voter", voter);
     }
 
-    function executeProposal(uint256 _proposalId)
-        public
-        onlyRole(msg.sender, "proposer")
-    {
-        require(accessControl.isRoleMember("proposer", msg.sender));
-        require(_proposalId > 0 && _proposalId <= proposalCount);
-        Proposal storage proposal = proposals[_proposalId];
-
-        // Check if proposal has been voted on
-        require(proposal.voteCount > 0);
-
-        // Check if proposal has been executed
-        require(!proposal.executed);
-
-        // Execute proposal
-        proposal.executed = true;
-
-        // Add voter role to all voters
-        for (uint256 i = 0; i < proposal.voted.length; i++) {
-            address voter = proposal.voted[i].key;
-            accessControl.createRole("voter", voter);
-        }
-
-        // Add commenter role to all commenters
-        for (uint256 i = 0; i < proposal.comments.length; i++) {
-            address commenter = proposal.commenters[i];
-            accessControl.createRole("commenter", commenter);
-        }
+    // Add commenter role to all commenters
+    for (address commenter in proposal.commenters) {
+        accessControl.createRole("commenter", commenter);
+    }
 
         // Emit event
         emit ProposalExecuted(_proposalId);
